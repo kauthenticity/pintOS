@@ -1,0 +1,105 @@
+#include "userprog/syscall.h"
+#include <stdio.h>
+#include <syscall-nr.h>
+#include "threads/interrupt.h"
+#include "threads/thread.h"
+#include "threads/palloc.h"
+#include "threads/vaddr.h"
+#include "devices/shutdown.h"
+#include "devices/input.h"
+#include <string.h>
+
+static void syscall_handler (struct intr_frame *);
+
+void verify_addr(int *addr){
+	if(!is_user_vaddr(addr)){
+		exit(-1);
+	}
+}
+
+void halt(void){
+	shutdown_power_off();
+}
+
+void exit(int status){
+	struct thread *cur = thread_current();
+	//printf("-----exit executing-----\n");
+	cur->status = status;
+	printf("%s: exit(%d)\n", thread_name(), status);
+	
+	thread_exit();
+}
+/*
+tid_t exec(const char *cmd_line){
+	
+}
+*/
+int wait(tid_t tid){
+	return process_wait(tid);
+}
+
+int read(int fd, void *buffer, unsigned size){
+	int input_size = 0;
+	if(fd==0){
+		input_size = input_getc();
+	}
+
+	return input_size;
+}
+
+int write(int fd, const void *buffer, unsigned size){
+	/* STDOUT */
+	//printf("buffer : ");
+	if(fd == 1){
+		putbuf((char *)buffer, (size_t)size);
+	}
+
+	return size;
+}
+
+
+
+
+void
+syscall_init (void) {
+  intr_register_int (0x30, 3, INTR_ON, syscall_handler, "syscall");
+}
+
+static void
+syscall_handler (struct intr_frame *f UNUSED) 
+{
+	uint32_t syscall_num = *(uint32_t *)(f->esp);
+	//printf("syscall num : %d\n", (syscall_num));
+	switch (syscall_num){
+		case SYS_HALT :
+		{
+			halt();
+			break;
+		}
+		case SYS_EXIT : 
+		{
+			verify_addr((f->esp)+4);
+			uint32_t status = *(int *)((f->esp)+4);
+			exit(status);
+			break;
+		}
+		case SYS_EXEC : 
+			break;
+		case SYS_WAIT : 
+			break;
+		case SYS_WRITE : 
+		{
+			//printf("-------write executing-------\n");
+			uint32_t fd = *(uint32_t *)((f->esp)+4);
+			const void *buffer = (const void *)*(uint32_t *)((f->esp)+8);
+			unsigned size = *(uint32_t *)((f->esp)+12);
+			int status = write(fd, buffer, size);
+			f->eax = status;
+			break;
+		}
+		case SYS_READ : 
+			break;
+	}
+
+	return ;
+}
